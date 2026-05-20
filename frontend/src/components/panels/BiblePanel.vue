@@ -483,6 +483,8 @@ const formatJson = () => {
 }
 
 const generateBible = async () => {
+  const { ensureLlmConfigured } = await import('@/utils/llmRuntimeGate')
+  if (!(await ensureLlmConfigured())) return
   generating.value = true
   try {
     const res = await bibleApi.generateBible(props.slug)

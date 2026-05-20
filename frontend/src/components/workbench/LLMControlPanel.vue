@@ -663,6 +663,8 @@ async function saveAll() {
     await nextTick()
     restoreUiState()
     saveUiState()
+    const { invalidateLlmRuntimeCache } = await import('@/utils/llmRuntimeGate')
+    invalidateLlmRuntimeCache()
     message.success('LLM 配置已保存')
   } catch (error) {
     const detail = error instanceof Error ? error.message : '保存失败'

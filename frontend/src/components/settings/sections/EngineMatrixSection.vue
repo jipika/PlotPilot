@@ -384,6 +384,8 @@ async function handleSave() {
     }
 
     await llmControlApi.saveConfig(newConfig)
+    const { invalidateLlmRuntimeCache } = await import('@/utils/llmRuntimeGate')
+    invalidateLlmRuntimeCache()
     message.success('配置已保存，系统已切换路由通道')
     await loadData()
   } catch {
