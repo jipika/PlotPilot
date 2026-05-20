@@ -1,5 +1,55 @@
-"""Autopilot 路由共享状态与构建逻辑。"""
-"""自动驾驶控制 API（v2：含审阅确认 + SSE 生成流）"""
+"""Autopilot 路由共享状态与构建逻辑（v2：含审阅确认 + SSE 生成流）。"""
+
+# control / streams / system 使用 `from ...shared import *`；须显式列出以 _ 开头的符号
+__all__ = [
+    "APIRouter",
+    "AutopilotStatus",
+    "HTTPException",
+    "NovelId",
+    "NovelStage",
+    "Optional",
+    "PER_NOVEL_FAILURE_THRESHOLD",
+    "Query",
+    "StartRequest",
+    "StreamingResponse",
+    "asyncio",
+    "datetime",
+    "get_chapter_repository",
+    "get_db_path",
+    "get_novel_repository",
+    "install_autopilot_log_ring_handler",
+    "iter_new_for_novel",
+    "json",
+    "logger",
+    "os",
+    "read_incremental_log_file_lines",
+    "router",
+    "shorten_log_message",
+    "time",
+    "_SHARED_STATE_CACHE",
+    "_SSE_MAX_LIFETIME_SECONDS",
+    "_SSE_THREAD_POOL",
+    "_audit_event_message",
+    "_autopilot_events_tick_sync",
+    "_autopilot_status_zh",
+    "_chapter_stream_chunks_sync",
+    "_chapter_stream_tick_sync",
+    "_clamp_autopilot_target_chapters",
+    "_clamp_autopilot_words_per_chapter",
+    "_get_shared_state_for_novel",
+    "_get_shared_state_for_novel_cached",
+    "_has_chapter_nodes_under_current_act",
+    "_is_client_disconnected",
+    "_log_stream_boot_meta_sync",
+    "_log_stream_file_cursor_init_sync",
+    "_log_stream_io_tick_sync",
+    "_log_stream_replay_sync",
+    "_persist_autopilot_running_sync",
+    "_rm",
+    "_stage_name_zh",
+    "_stage_needs_human_review",
+]
+
 import asyncio
 import json
 import logging

@@ -566,6 +566,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import { bibleApi, type BibleDTO, type BibleRelationshipEntry, type CharacterDTO, type StyleNoteDTO, consumeBibleGenerateStream, type WorldbuildingDimensionData } from '@/api/bible'
 // timeout constants removed - SSE runs until complete or error
 import { worldbuildingApi } from '@/api/worldbuilding'
+import { filterWorldbuildingFields } from '@/constants/worldbuildingFields'
 import { workflowApi, type MainPlotOptionDTO } from '@/api/workflow'
 import { characterPsycheApi } from '@/api/engineCore'
 import { resolveHttpUrl } from '@/api/config'
@@ -580,6 +581,7 @@ import {
   writeWizardUiCache,
   type WizardUiCachePayload,
 } from '@/utils/wizardStageCache'
+import { ensureLlmConfigured } from '@/utils/llmRuntimeGate'
 import { drawGachaFullName } from '@/utils/characterNameGacha'
 
 const WB_DIMS = ['core_rules', 'geography', 'society', 'culture', 'daily_life'] as const
@@ -767,8 +769,11 @@ const emit = defineEmits<{
   (e: 'skip'): void
 }>()
 
-/** 增量 JSON 解析器：从流式文本中提取已完成和正在流式的字段 */
-function parseStreamingJsonFields(text: string): {
+/** 增量 JSON 解析器：从流式文本中提取已完成和正在流式的字段（仅白名单字段） */
+function parseStreamingJsonFields(
+  text: string,
+  dimension: string
+): {
   completed: Record<string, string>
   streamingKey: string
   streamingValue: string
@@ -787,13 +792,10 @@ function parseStreamingJsonFields(text: string): {
   if (jsonMatch) {
     jsonStr = jsonMatch[1]
   }
-  // 尝试提取 { ... } 部分
   const braceStart = jsonStr.indexOf('{')
   if (braceStart === -1) return result
   jsonStr = jsonStr.slice(braceStart)
 
-  // 用正则逐个匹配 "key": "value" 对
-  // 已完成的字段：key 和 value 都完整闭合
   const completedRe = /"(\w+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g
   let m: RegExpExecArray | null
   while ((m = completedRe.exec(jsonStr)) !== null) {
@@ -804,22 +806,28 @@ function parseStreamingJsonFields(text: string): {
       .replace(/\\\\/g, '\\')
   }
 
-  // 正在流式的字段：key 完整但 value 还没闭合
-  // 匹配 "key": "value_so_far... (末尾没有闭合引号)
   const streamingRe = /"(\w+)"\s*:\s*"((?:[^"\\]|\\.)*)$/
   const streamMatch = streamingRe.exec(jsonStr)
-  if (streamMatch) {
-    // 确保这个字段不在已完成列表中（可能是最后一个字段刚好闭合了）
-    if (!(streamMatch[1] in result.completed)) {
-      result.streamingKey = streamMatch[1]
-      result.streamingValue = streamMatch[2]
-        .replace(/\\n/g, '\n')
-        .replace(/\\t/g, '\t')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\')
-    }
+  if (streamMatch && !(streamMatch[1] in result.completed)) {
+    result.streamingKey = streamMatch[1]
+    result.streamingValue = streamMatch[2]
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
   }
 
+  const filtered = filterWorldbuildingFields(dimension, result.completed)
+  result.completed = filtered
+  if (result.streamingKey && !(result.streamingKey in filtered)) {
+    const allowed = filterWorldbuildingFields(dimension, {
+      [result.streamingKey]: result.streamingValue,
+    })
+    if (!Object.keys(allowed).length) {
+      result.streamingKey = ''
+      result.streamingValue = ''
+    }
+  }
   return result
 }
 
@@ -983,6 +991,7 @@ function persistStepFourUiToCache(opts?: { includePlotOptions?: boolean }) {
 }
 
 async function loadPlotSuggestions() {
+  if (!(await ensureLlmConfigured())) return
   step4RestoredFromCache.value = false
   plotSuggesting.value = true
   plotSuggestError.value = ''
@@ -1271,6 +1280,7 @@ async function startLocationsGenerationPoll() {
 
 /** 启动第1步生成（SSE 流式，失败降级到轮询） */
 async function startBibleGeneration() {
+  if (!(await ensureLlmConfigured())) return
   try {
     const useSse = await checkSseAvailable(props.novelId)
     if (useSse) {
@@ -1345,13 +1355,13 @@ bibleError.value = ''
       styleText.value = content
     },
     onWorldbuildingField: (dimension, field, value) => {
-      // 字段级推送：维度流式完成后逐字段推送最终值
+      const patch = filterWorldbuildingFields(dimension, { [field]: value })
+      if (!Object.keys(patch).length) return
       const dim = dimension as keyof typeof worldbuildingData.value
       worldbuildingData.value = {
         ...worldbuildingData.value,
-        [dimension]: { ...worldbuildingData.value[dim], [field]: value },
+        [dimension]: { ...worldbuildingData.value[dim], ...patch },
       }
-      // 第一个字段到达时清空流式预览文本
       streamingDimText.value = ''
       if (activeDimension.value !== dimension) {
         if (activeDimension.value) {
@@ -1381,19 +1391,16 @@ bibleError.value = ''
       }
 
       // ── 增量 JSON 解析：提取已完成和正在流式的字段 ──
-      const parsed = parseStreamingJsonFields(streamingDimText.value)
+      const parsed = parseStreamingJsonFields(streamingDimText.value, dimension)
       const dim = dimension as keyof typeof worldbuildingData.value
 
-      // 已完成的字段 → 更新到 worldbuildingData
-      const completedFields: Record<string, string> = {}
-      for (const [k, v] of Object.entries(parsed.completed)) {
-        completedFields[k] = v
+      const completedFields: Record<string, string> = { ...parsed.completed }
+      for (const k of Object.keys(completedFields)) {
         if (!arrivedFields.value.has(k)) {
           arrivedFields.value = new Set([...arrivedFields.value, k])
         }
       }
 
-      // 正在流式的字段 → 也更新到 worldbuildingData（带流式光标）
       if (parsed.streamingKey && parsed.streamingValue !== undefined) {
         completedFields[parsed.streamingKey] = parsed.streamingValue
         activeField.value = parsed.streamingKey
@@ -1404,15 +1411,19 @@ bibleError.value = ''
       if (Object.keys(completedFields).length > 0) {
         worldbuildingData.value = {
           ...worldbuildingData.value,
-          [dimension]: { ...worldbuildingData.value[dim], ...completedFields },
+          [dimension]: {
+            ...worldbuildingData.value[dim],
+            ...filterWorldbuildingFields(dimension, completedFields),
+          },
         }
       }
     },
     onWorldbuildingDimension: (data: WorldbuildingDimensionData) => {
       const dim = data.dimension as keyof typeof worldbuildingData.value
+      const content = filterWorldbuildingFields(data.dimension, data.content as Record<string, string>)
       worldbuildingData.value = {
         ...worldbuildingData.value,
-        [data.dimension]: { ...worldbuildingData.value[dim], ...data.content },
+        [data.dimension]: { ...worldbuildingData.value[dim], ...content },
       }
       if (activeDimension.value && activeDimension.value !== data.dimension) {
         completedDimensions.value = new Set([...completedDimensions.value, activeDimension.value])
@@ -1445,6 +1456,7 @@ bibleError.value = ''
 
 /** 启动第2步生成（SSE 流式，失败降级到轮询） */
 async function startCharactersGeneration() {
+  if (!(await ensureLlmConfigured())) return
   try {
     const useSse = await checkSseAvailable(props.novelId)
     if (useSse) {
@@ -1523,6 +1535,7 @@ charactersError.value = ''
 
 /** 启动第3步生成（SSE 流式，失败降级到轮询） */
 async function startLocationsGeneration() {
+  if (!(await ensureLlmConfigured())) return
   try {
     const useSse = await checkSseAvailable(props.novelId)
     if (useSse) {

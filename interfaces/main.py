@@ -120,6 +120,24 @@ app = FastAPI(
     redirect_slashes=True,  # 自动将 /api/v1/novels 重定向到 /api/v1/novels/
 )
 
+# 守护进程生命周期（须在 startup 钩子之前导入）
+from interfaces.runtime.daemon_lifecycle import (
+    configure_daemon_logging,
+    get_shared_novel_state,
+    restart_autopilot_daemon,
+    update_shared_novel_state,
+    _cleanup_orphan_python_processes,
+    _get_shared_state,
+    _init_dag_node_registry,
+    _recover_drafts_on_startup,
+    _start_autopilot_daemon_thread,
+    _stop_all_running_novels,
+    _stop_autopilot_daemon_thread,
+)
+from interfaces.runtime import daemon_lifecycle as _dl
+
+configure_daemon_logging(log_level, log_file)
+
 # ── 前端静态文件托管 ──
 _FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 if _FRONTEND_DIR.exists():
@@ -314,22 +332,6 @@ async def internal_shutdown(request: Request):
     threading.Thread(target=_internal_shutdown_after_response, daemon=True).start()
     return {"ok": True, "message": "shutting down"}
 
-# 守护进程生命周期（见 interfaces.runtime.daemon_lifecycle）
-from interfaces.runtime.daemon_lifecycle import (
-    configure_daemon_logging,
-    get_shared_novel_state,
-    restart_autopilot_daemon,
-    update_shared_novel_state,
-    _get_shared_state,
-    _init_dag_node_registry,
-    _recover_drafts_on_startup,
-    _start_autopilot_daemon_thread,
-    _stop_all_running_novels,
-    _stop_autopilot_daemon_thread,
-)
-
-
-
 # 配置 CORS
 # 前后端同端口部署：前端是同源请求，默认允许所有源。
 # 开发环境可通过 CORS_ORIGINS 环境变量限制。
@@ -457,7 +459,8 @@ async def health_check():
         健康状态
     """
     uptime = time.time() - STARTUP_TIME
-    daemon_alive = _daemon_process is not None and _daemon_process.is_alive()
+    _dp = _dl._daemon_process
+    daemon_alive = _dp is not None and _dp.is_alive()
     return {
         "status": "healthy",
         "version": APP_RELEASE_VERSION,
@@ -465,7 +468,7 @@ async def health_check():
         "uptime_seconds": round(uptime, 2),
         "daemon_process": {
             "running": daemon_alive,
-            "pid": _daemon_process.pid if _daemon_process else None
+            "pid": _dp.pid if _dp else None
         }
     }
 
