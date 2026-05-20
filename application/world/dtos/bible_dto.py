@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Any, TYPE_CHECKING, Dict
 
+from domain.bible.character_serialization import active_wounds_to_list, voice_profile_to_dict
+
 if TYPE_CHECKING:
     from domain.bible.entities.bible import Bible
     from domain.bible.entities.character import Character
@@ -65,8 +67,8 @@ class CharacterDTO:
             idle_behavior=getattr(character, "idle_behavior", None) or "",
             core_belief=getattr(character, "core_belief", None) or "",
             moral_taboos=list(getattr(character, "moral_taboos", None) or []),
-            voice_profile=dict(getattr(character, "voice_profile", None) or {}),
-            active_wounds=list(getattr(character, "active_wounds", None) or []),
+            voice_profile=voice_profile_to_dict(getattr(character, "voice_profile", None)),
+            active_wounds=active_wounds_to_list(getattr(character, "active_wounds", None)),
         )
 
 

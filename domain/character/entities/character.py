@@ -5,9 +5,14 @@ from typing import Any, Dict, List, Optional
 from domain.character.value_objects.character_id import CharacterId
 from domain.shared.time_utils import utcnow_iso
 
+
 @dataclass
 class Character:
-    """统一角色聚合根 — 合并 Bible / 引擎心理画像 / 动态状态"""
+    """统一角色表持久化模型（unified_characters）。
+
+    叙事/生成侧请使用 engine.core.entities.character.Character；
+    Bible/Cast 兼容层见 domain.bible / domain.cast。
+    """
     id: CharacterId
     novel_id: str
     name: str

@@ -149,3 +149,16 @@ class TracePort(ABC):
     ) -> List[TraceRecord]:
         """查询溯源记录"""
         ...
+
+
+# ─── 应用层 AI 契约（原 domain.ai）───
+from engine.core.ports.ai_contracts import (
+    ChapterSummarizer,
+    EmbeddingService,
+    GenerationConfig as AppGenerationConfig,
+    GenerationResult as AppGenerationResult,
+    LLMService,
+    Prompt,
+    TokenUsage,
+    VectorStore,
+)

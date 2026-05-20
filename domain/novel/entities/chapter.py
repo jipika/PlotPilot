@@ -1,17 +1,12 @@
 # domain/novel/entities/chapter.py
-from enum import Enum
+"""持久化视角章节实体；ChapterStatus 与 engine.core 统一。"""
 from datetime import datetime
+
 from domain.shared.base_entity import BaseEntity
 from domain.novel.value_objects.novel_id import NovelId
 from domain.novel.value_objects.chapter_content import ChapterContent
 from domain.novel.value_objects.word_count import WordCount
-
-
-class ChapterStatus(str, Enum):
-    """章节状态"""
-    DRAFT = "draft"
-    REVIEWING = "reviewing"
-    COMPLETED = "completed"
+from engine.core.entities.chapter import ChapterStatus
 
 
 class Chapter(BaseEntity):

@@ -39,6 +39,9 @@ class Worldbuilding:
     language_slang: str = ""         # 俚语口音
     entertainment: str = ""          # 娱乐方式
 
+    # 超出 15 个经典槽位的 LLM 扩展字段（JSON 五维 dict）
+    extensions_json: str = "{}"
+
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
 

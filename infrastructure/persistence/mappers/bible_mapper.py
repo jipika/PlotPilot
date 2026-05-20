@@ -7,6 +7,7 @@ from domain.bible.entities.location import Location
 from domain.bible.entities.timeline_note import TimelineNote
 from domain.bible.entities.style_note import StyleNote
 from domain.bible.value_objects.character_id import CharacterId
+from domain.bible.character_serialization import active_wounds_to_list, voice_profile_to_dict
 from domain.novel.value_objects.novel_id import NovelId
 
 
@@ -45,8 +46,8 @@ class BibleMapper:
                     "reveal_chapter": getattr(char, "reveal_chapter", None),
                     "core_belief": getattr(char, "core_belief", None) or "",
                     "moral_taboos": list(getattr(char, "moral_taboos", None) or []),
-                    "voice_profile": dict(getattr(char, "voice_profile", None) or {}),
-                    "active_wounds": list(getattr(char, "active_wounds", None) or []),
+                    "voice_profile": voice_profile_to_dict(getattr(char, "voice_profile", None)),
+                    "active_wounds": active_wounds_to_list(getattr(char, "active_wounds", None)),
                 }
                 for char in bible.characters
             ],

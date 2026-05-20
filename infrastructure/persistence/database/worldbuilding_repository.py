@@ -85,6 +85,7 @@ class WorldbuildingRepository:
             food_clothing=row["food_clothing"] or "",
             language_slang=row["language_slang"] or "",
             entertainment=row["entertainment"] or "",
+            extensions_json=row["extensions_json"] if "extensions_json" in row.keys() else "{}",
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -103,8 +104,8 @@ class WorldbuildingRepository:
                     politics, economy, class_system,
                     history, religion, taboos,
                     food_clothing, language_slang, entertainment,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    extensions_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 worldbuilding.id,
@@ -125,6 +126,7 @@ class WorldbuildingRepository:
                 worldbuilding.food_clothing,
                 worldbuilding.language_slang,
                 worldbuilding.entertainment,
+                getattr(worldbuilding, "extensions_json", "{}") or "{}",
                 worldbuilding.created_at.isoformat() if isinstance(worldbuilding.created_at, datetime) else worldbuilding.created_at,
                 datetime.now().isoformat(),
             ),

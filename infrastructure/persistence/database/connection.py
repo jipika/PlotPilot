@@ -505,6 +505,12 @@ class DatabaseConnection:
         _apply_chapters_word_count_migration(conn)
         _ensure_triple_provenance_table(conn)
         _apply_migration_files(conn)
+        try:
+            from infrastructure.persistence.migrations.runner import run_pending_migrations
+
+            run_pending_migrations(self.db_path)
+        except Exception as exc:
+            logger.debug("Alembic runner: %s", exc)
         conn.close()
 
     def get_connection(self) -> sqlite3.Connection:

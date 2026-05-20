@@ -57,12 +57,7 @@ class PriorityTier(str, Enum):
     T3_SACRIFICIAL = "t3_sacrificial"  # 可牺牲泡沫
 
 
-class StoryPhase(str, Enum):
-    """故事生命周期阶段 —— 全局收敛沙漏的核心状态机"""
-    OPENING = "opening"       # 开局期 (0% - 25%)：尽情铺陈，抛出悬念
-    DEVELOPMENT = "development" # 发展期 (25% - 75%)：激化矛盾，引入支线
-    CONVERGENCE = "convergence" # 收敛期 (75% - 90%)：禁止开新坑，强制填坑
-    FINALE = "finale"          # 终局期 (90% - 100%)：终极对决，切断日常
+from engine.core.entities.story import StoryPhase
 
 
 @dataclass

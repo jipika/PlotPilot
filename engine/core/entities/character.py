@@ -25,6 +25,10 @@ class CharacterId:
     """角色ID值对象"""
     value: str
 
+    def __post_init__(self) -> None:
+        if not self.value or not str(self.value).strip():
+            raise ValueError("Character ID cannot be empty")
+
     @classmethod
     def generate(cls) -> CharacterId:
         return cls(value=str(uuid.uuid4()))

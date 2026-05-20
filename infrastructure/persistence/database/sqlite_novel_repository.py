@@ -151,6 +151,14 @@ class SqliteNovelRepository(NovelRepository):
             now,
             now
         ))
+        try:
+            from infrastructure.persistence.database.novel_autopilot_state_repository import (
+                NovelAutopilotStateRepository,
+            )
+
+            NovelAutopilotStateRepository(self.db).upsert_from_novel(novel)
+        except Exception as exc:
+            logger.debug("侧表同步跳过（表可能尚未迁移）: %s", exc)
         self.db.get_connection().commit()
 
     async def async_save(self, novel: Novel) -> None:
@@ -199,6 +207,16 @@ class SqliteNovelRepository(NovelRepository):
 
         sql = f"UPDATE novels SET {', '.join(set_clauses)} WHERE id = ?"
         self.db.execute(sql, tuple(values))
+        try:
+            from infrastructure.persistence.database.novel_autopilot_state_repository import (
+                NovelAutopilotStateRepository,
+            )
+
+            merged = self.get_by_id(novel_id)
+            if merged:
+                NovelAutopilotStateRepository(self.db).upsert_from_novel(merged)
+        except Exception as exc:
+            logger.debug("侧表 patch 跳过: %s", exc)
         self.db.get_connection().commit()
 
     def get_by_id(self, novel_id: NovelId) -> Optional[Novel]:
@@ -304,6 +322,15 @@ class SqliteNovelRepository(NovelRepository):
 
     def _row_to_novel(self, novel_id: NovelId, row: dict) -> Novel:
         """将数据库行转换为 Novel 实体"""
+        try:
+            from infrastructure.persistence.database.novel_autopilot_state_repository import (
+                NovelAutopilotStateRepository,
+            )
+
+            row = NovelAutopilotStateRepository(self.db).load_into_row(dict(row))
+        except Exception as exc:
+            logger.debug("侧表读合并跳过: %s", exc)
+
         raw_status = row.get('autopilot_status', 'stopped')
         try:
             autopilot_status = AutopilotStatus(raw_status)

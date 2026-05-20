@@ -24,60 +24,9 @@ from typing import Any, Callable, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
-class PersistenceCommandType(Enum):
-    """持久化命令类型"""
-    # 章节相关
-    UPSERT_CHAPTER = "upsert_chapter"
-    UPDATE_CHAPTER_STATUS = "update_chapter_status"
-    UPDATE_CHAPTER_TENSION = "update_chapter_tension"
-    UPDATE_CHAPTER_WORD_COUNT = "update_chapter_word_count"
+from application.engine.services.persistence_command_types import PersistenceCommandType
 
-    # 小说相关
-    PATCH_NOVEL = "patch_novel"
-    SAVE_NOVEL = "save_novel"
-    UPDATE_NOVEL_STATE = "update_novel_state"
-
-    # 知识库相关
-    UPSERT_KNOWLEDGE = "upsert_knowledge"
-
-    # 故事节点相关
-    SAVE_STORY_NODE = "save_story_node"
-
-    # 伏笔
-    UPDATE_FORESHADOWS = "update_foreshadows"
-
-    # 故事线
-    UPDATE_STORYLINES = "update_storylines"
-
-    # 剧情弧光
-    UPDATE_PLOT_ARC = "update_plot_arc"
-
-    # 编年史
-    UPDATE_CHRONICLES = "update_chronicles"
-
-    # 叙事知识
-    UPDATE_KNOWLEDGE = "update_knowledge"
-
-    # Bible
-    UPDATE_BIBLE = "update_bible"
-
-    # 三元组
-    UPDATE_TRIPLES = "update_triples"
-
-    # 快照
-    UPDATE_SNAPSHOTS = "update_snapshots"
-
-    # 通用 SQL 执行（CQRS 统一写入通道——守护进程不再直接写 DB）
-    EXECUTE_SQL = "execute_sql"
-
-    # 单事务多语句批量写（内核高性能路径）
-    EXECUTE_SQL_TXN_BATCH = "execute_sql_txn_batch"
-
-    # 章节级联删除（含 try/except 可选表，必须在 writer 线程执行）
-    DELETE_CHAPTER = "delete_chapter"
-
-    # 批量命令
-    BATCH = "batch"
+# PersistenceCommandType 定义见 persistence_command_types.py（V1/V2 共用）
 
 
 @dataclass
@@ -336,26 +285,30 @@ class PersistenceQueue:
         }
 
 
-# 全局单例
-_persistence_queue: Optional[PersistenceQueue] = None
+# 全局单例（V2 SQLite 统一门面）
+_persistence_queue: Optional[Any] = None
 
 
-def get_persistence_queue() -> PersistenceQueue:
-    """获取全局持久化队列实例"""
+def get_persistence_queue():
+    """获取全局持久化队列实例（SQLite V2）。"""
     global _persistence_queue
     if _persistence_queue is None:
-        _persistence_queue = PersistenceQueue()
+        from application.engine.services.persistence_queue_unified import (
+            get_unified_persistence_queue,
+        )
+
+        _persistence_queue = get_unified_persistence_queue()
     return _persistence_queue
 
 
-def initialize_persistence_queue() -> mp.Queue:
-    """初始化持久化队列（主进程启动时调用）"""
+def initialize_persistence_queue():
+    """初始化持久化队列（主进程启动时调用）。"""
     pq = get_persistence_queue()
     return pq.initialize()
 
 
 def inject_persistence_queue(queue: mp.Queue) -> None:
-    """注入持久化队列（守护进程启动时调用）"""
+    """注入持久化队列（守护进程兼容；V2 下为 no-op）。"""
     pq = get_persistence_queue()
     pq.inject_queue(queue)
 

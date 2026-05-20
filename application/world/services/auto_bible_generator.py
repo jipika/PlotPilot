@@ -10,9 +10,6 @@ from domain.ai.value_objects.prompt import Prompt
 from application.world.services.bible_service import BibleService
 from application.world.services.worldbuilding_service import WorldbuildingService
 from application.world.worldbuilding_merge import (
-    bible_dto_world_settings_to_slices,
-    merge_worldbuilding_table_and_bible_slices,
-    worldbuilding_entity_to_slices,
 )
 from domain.bible.triple import Triple, SourceType
 from infrastructure.persistence.database.triple_repository import TripleRepository
@@ -888,71 +885,39 @@ JSON 格式（不要有其他文字）：
                     raise
 
     async def _save_worldbuilding(self, novel_id: str, worldbuilding_data: Dict[str, Any]) -> None:
-        """保存世界观到数据库（同时保存到Worldbuilding表和Bible的world_settings）"""
+        """保存世界观到 worldbuilding 表（含 extensions_json，不再双写 Bible）。"""
         logger.debug("_save_worldbuilding called")
 
-        # 1. 保存到Worldbuilding表（用于后续生成人物和地点时读取）
-        if self.worldbuilding_service:
-            try:
-                logger.debug("Calling worldbuilding_service.update_worldbuilding")
-                self.worldbuilding_service.update_worldbuilding(
-                    novel_id=novel_id,
-                    core_rules=worldbuilding_data.get("core_rules"),
-                    geography=worldbuilding_data.get("geography"),
-                    society=worldbuilding_data.get("society"),
-                    culture=worldbuilding_data.get("culture"),
-                    daily_life=worldbuilding_data.get("daily_life")
-                )
-                logger.debug("Worldbuilding saved to Worldbuilding table")
-                logger.info(f"Worldbuilding saved for {novel_id}")
-            except Exception as e:
-                logger.error("Failed to save worldbuilding: %s", e)
+        if not self.worldbuilding_service:
+            return
 
-        # 2. 同时保存到Bible的world_settings（用于前端显示）
         try:
-            logger.debug("Saving worldbuilding to Bible.world_settings")
-            bible = self.bible_service.get_bible_by_novel(novel_id)
-            if not bible:
-                bible_id = f"{novel_id}-bible"
-                self.bible_service.create_bible(bible_id, novel_id)
+            from application.world.worldbuilding_storage import apply_dimension_to_entity
 
-            # 将5维度数据转换为world_setting条目
-            # WorldSetting的type只能是'rule', 'location', 'item'，所以统一使用'rule'
-            import uuid
-            for dimension_name, dimension_data in worldbuilding_data.items():
-                if isinstance(dimension_data, dict):
-                    for key, value in dimension_data.items():
-                        setting_id = f"{novel_id}-ws-{uuid.uuid4().hex[:8]}"
-                        self.bible_service.add_world_setting(
-                            novel_id=novel_id,
-                            setting_id=setting_id,
-                            name=f"{dimension_name}.{key}",
-                            description=value,
-                            setting_type="rule"  # 统一使用'rule'类型
-                        )
-            logger.info("Worldbuilding saved to Bible.world_settings successfully")
+            wb = self.worldbuilding_service.get_worldbuilding(novel_id)
+            if not wb:
+                wb = self.worldbuilding_service.create_worldbuilding(novel_id)
+
+            for dim_key, dim_data in worldbuilding_data.items():
+                if isinstance(dim_data, dict):
+                    apply_dimension_to_entity(wb, dim_key, dim_data)
+
+            self.worldbuilding_service.repository.save(wb)
+            logger.info("Worldbuilding saved for %s", novel_id)
         except Exception as e:
-            logger.error(f"Failed to save to Bible.world_settings: {e}")
+            logger.error("Failed to save worldbuilding: %s", e)
 
     def _load_worldbuilding(self, novel_id: str) -> Dict[str, Any]:
-        """加载已有世界观：合并 Bible.world_settings 与 worldbuilding 映射表字段。"""
-        table_slices = {}
-        if self.worldbuilding_service:
-            try:
-                wb = self.worldbuilding_service.get_worldbuilding(novel_id)
-                table_slices = worldbuilding_entity_to_slices(wb)
-            except Exception:
-                table_slices = worldbuilding_entity_to_slices(None)
+        """加载世界观（权威：worldbuilding 表）。"""
+        from application.world.worldbuilding_storage import entity_to_canonical_slices
 
-        bible = None
+        if not self.worldbuilding_service:
+            return {}
         try:
-            bible = self.bible_service.get_bible_by_novel(novel_id)
+            wb = self.worldbuilding_service.get_worldbuilding(novel_id)
+            return entity_to_canonical_slices(wb)
         except Exception:
-            bible = None
-        bible_slices = bible_dto_world_settings_to_slices(bible)
-
-        # Bible.world_settings 含 SSE 生成的扩展字段，作完整基底；世界映射表中非空的槽位字段覆盖同名键。
-        return merge_worldbuilding_table_and_bible_slices(table_slices, bible_slices)
+            return {}
 
     def _load_characters(self, novel_id: str) -> list:
         """加载已有人物"""

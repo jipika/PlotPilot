@@ -80,21 +80,10 @@ def merge_worldbuilding_table_and_bible_slices(
     table_slices: Dict[str, Dict[str, str]],
     bible_slices: Dict[str, Dict[str, str]],
 ) -> Dict[str, Dict[str, str]]:
-    """以 Bible 为基底，用世界观表中「非空」字段覆盖同名键。
-
-    这样 SSE 写入的多余字段可从 Bible 读回；用户在世界观面板改过并落库的键优先覆盖。
-    """
-    merged: Dict[str, Dict[str, str]] = {}
-    for dim in WORLD_BUILDING_DIMENSION_KEYS:
-        b_blk = bible_slices.get(dim) or {}
-        t_blk = table_slices.get(dim) or {}
-        out = dict(b_blk)
-        for kk, vv in t_blk.items():
-            s = "" if vv is None else str(vv).strip()
-            if s:
-                out[kk] = s
-        merged[dim] = out
-    return merged
+    """已废弃双写合并：以 worldbuilding 表为唯一权威；表为空时仅作旧数据迁移回退。"""
+    if worldbuilding_slices_nonempty(table_slices):
+        return table_slices
+    return bible_slices if bible_slices else table_slices
 
 
 def project_slices_to_legacy_api_shape(full_slices: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:

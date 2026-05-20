@@ -1,0 +1,11 @@
+# PlotPilot 运行时配置（架构治理 P3-7）
+app:
+  name: PlotPilot
+  release_version: "1.0.2"
+
+persistence:
+  queue: sqlite_v2
+  zombie_timeout_minutes: 5
+
+engine:
+  default_poll_interval_seconds: 3

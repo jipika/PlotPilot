@@ -18,57 +18,12 @@ import threading
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
-from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class PersistenceCommandType(Enum):
-    """持久化命令类型"""
-    # 章节相关
-    UPSERT_CHAPTER = "upsert_chapter"
-    UPDATE_CHAPTER_STATUS = "update_chapter_status"
-    UPDATE_CHAPTER_TENSION = "update_chapter_tension"
-    UPDATE_CHAPTER_WORD_COUNT = "update_chapter_word_count"
-
-    # 小说相关
-    PATCH_NOVEL = "patch_novel"
-    SAVE_NOVEL = "save_novel"
-    UPDATE_NOVEL_STATE = "update_novel_state"
-
-    # 知识库相关
-    UPSERT_KNOWLEDGE = "upsert_knowledge"
-
-    # 故事节点相关
-    SAVE_STORY_NODE = "save_story_node"
-
-    # 伏笔
-    UPDATE_FORESHADOWS = "update_foreshadows"
-
-    # 故事线
-    UPDATE_STORYLINES = "update_storylines"
-
-    # 剧情弧光
-    UPDATE_PLOT_ARC = "update_plot_arc"
-
-    # 编年史
-    UPDATE_CHRONICLES = "update_chronicles"
-
-    # 叙事知识
-    UPDATE_KNOWLEDGE = "update_knowledge"
-
-    # Bible
-    UPDATE_BIBLE = "update_bible"
-
-    # 三元组
-    UPDATE_TRIPLES = "update_triples"
-
-    # 快照
-    UPDATE_SNAPSHOTS = "update_snapshots"
-
-    # 批量命令
-    BATCH = "batch"
+from application.engine.services.persistence_command_types import PersistenceCommandType
 
 
 @dataclass
@@ -467,6 +422,18 @@ class PersistentQueueV2:
 
     def _process_command(self, command: PersistenceCommand):
         """处理单个命令"""
+        if command.command_type == PersistenceCommandType.BATCH.value:
+            for cmd in command.payload.get("commands", []):
+                sub = PersistenceCommand(
+                    command_type=cmd.get("command_type", ""),
+                    payload=cmd.get("payload", {}),
+                    priority=command.priority,
+                    max_retries=command.max_retries,
+                )
+                self._process_command(sub)
+            self.ack(command.command_id)
+            return
+
         handler = self._handlers.get(command.command_type)
 
         if not handler:

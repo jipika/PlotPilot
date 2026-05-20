@@ -11,7 +11,7 @@ from application.world.worldbuilding_merge import (
 )
 
 
-def test_merge_keeps_llm_extra_and_table_overwrites():
+def test_merge_prefers_table_over_bible():
     bible_sl = {"core_rules": {"power_system": "B", "cost_and_limitation": "EXTRA"}}
     table_sl = worldbuilding_entity_to_slices(
         Worldbuilding(
@@ -25,8 +25,23 @@ def test_merge_keeps_llm_extra_and_table_overwrites():
     merged = merge_worldbuilding_table_and_bible_slices(table_sl, bible_sl)
     cr = merged["core_rules"]
     assert cr["power_system"] == "A"
-    assert cr["cost_and_limitation"] == "EXTRA"
+    assert cr.get("cost_and_limitation") != "EXTRA"
     assert cr["physics_rules"] == "P"
+
+
+def test_extensions_json_roundtrip():
+    from application.world.worldbuilding_storage import (
+        apply_slices_to_entity,
+        entity_to_canonical_slices,
+    )
+
+    wb = Worldbuilding(id="wb-2", novel_id="n2", power_system="A")
+    apply_slices_to_entity(
+        wb,
+        {"core_rules": {"power_system": "A", "cost_and_limitation": "EXTRA"}},
+    )
+    sl = entity_to_canonical_slices(wb)
+    assert sl["core_rules"]["cost_and_limitation"] == "EXTRA"
 
 
 def test_projection_appends_extra_to_tail_field():

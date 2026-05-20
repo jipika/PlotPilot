@@ -8,16 +8,12 @@ from pydantic import BaseModel
 from typing import Optional
 
 from application.world.services.worldbuilding_service import WorldbuildingService
-from application.world.services.bible_service import BibleService
 from infrastructure.persistence.database.worldbuilding_repository import WorldbuildingRepository
 from application.paths import get_db_path
 
-from interfaces.api.dependencies import get_bible_service
-from application.world.worldbuilding_merge import (
-    bible_dto_world_settings_to_slices,
-    merge_worldbuilding_table_and_bible_slices,
-    project_slices_to_legacy_api_shape,
-    worldbuilding_entity_to_slices,
+from application.world.worldbuilding_storage import (
+    canonical_slices_for_api,
+    entity_to_canonical_slices,
     worldbuilding_slices_nonempty,
 )
 
@@ -75,38 +71,17 @@ class UpdateWorldbuildingRequest(BaseModel):
 def get_worldbuilding(
     slug: str,
     service: WorldbuildingService = Depends(get_worldbuilding_service),
-    bible_service: BibleService = Depends(get_bible_service),
 ):
-    """获取小说的世界观（合并 worldbuilding 表与 Bible.world_settings）
-
-    SSE 向导会把超出 ORM 槽位的扩展字段写入 Bible；若仅用表读出，会与流式观感不一致，
-    故 GET 在此处做合并后再投影成前端使用的 15 个经典字段。
-    """
-    bible = bible_service.get_bible_by_novel(slug)
-    bible_slices = bible_dto_world_settings_to_slices(bible)
-
+    """获取小说的世界观（权威来源：worldbuilding 表 + extensions_json）。"""
     wb_entity = service.get_worldbuilding(slug)
 
     if wb_entity is None:
-        if not worldbuilding_slices_nonempty(bible_slices):
-            raise HTTPException(status_code=404, detail="Worldbuilding not found")
+        raise HTTPException(status_code=404, detail="Worldbuilding not found")
 
-        display = project_slices_to_legacy_api_shape(bible_slices)
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-        return {
-            "id": f"bible-{slug}",
-            "novel_id": slug,
-            **display,
-            "created_at": now,
-            "updated_at": now,
-        }
-
-    merged_slices = merge_worldbuilding_table_and_bible_slices(
-        worldbuilding_entity_to_slices(wb_entity),
-        bible_slices,
-    )
-    display = project_slices_to_legacy_api_shape(merged_slices)
+    display = canonical_slices_for_api(wb_entity)
+    full_slices = entity_to_canonical_slices(wb_entity)
+    if not worldbuilding_slices_nonempty(full_slices):
+        raise HTTPException(status_code=404, detail="Worldbuilding not found")
 
     dto = wb_entity.to_dict()
     dto["core_rules"] = display["core_rules"]
