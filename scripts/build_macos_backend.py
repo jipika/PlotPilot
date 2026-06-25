@@ -88,7 +88,7 @@ def build():
         # 收集数据文件
         "--add-data", f"{ROOT / 'config'}:config",
         "--add-data", f"{ROOT / 'shared'}:shared",
-        "--add-data", f"{ROOT / 'prompt_packages'}:prompt_packages",
+        "--add-data", f"{ROOT / 'infrastructure' / 'ai' / 'prompt_packages'}:infrastructure/ai/prompt_packages",
         # 排除不需要的大型包
         "--exclude-module", "torch",
         "--exclude-module", "torchvision",
