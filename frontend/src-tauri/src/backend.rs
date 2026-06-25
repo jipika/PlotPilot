@@ -352,7 +352,7 @@ impl BackendManager {
                 if let Err(e) = self.extract_embedded_python(&resource_dir) {
                     log::warn!("从资源目录提取内嵌 Python 失败: {}", e);
                 } else if let Some(path) =
-                    self.accept_python_candidate("资源目录内嵌 Python", embedded.clone())
+                    self.accept_python_candidate("资源目录内嵌 Python", embedded_python.clone())
                 {
                     return Some(path);
                 }
