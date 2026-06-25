@@ -134,11 +134,22 @@ impl BackendManager {
         Ok(())
     }
 
-    /// PyInstaller onedir：`$RESOURCE/plotpilot-backend/plotpilot-backend.exe`（见 tauri.conf resources 映射）
+    /// 跨平台后端二进制文件名（Windows: plotpilot-backend.exe, macOS/Linux: plotpilot-backend）
+    fn backend_binary_name() -> &'static str {
+        if cfg!(target_os = "windows") {
+            "plotpilot-backend.exe"
+        } else {
+            "plotpilot-backend"
+        }
+    }
+
+    /// PyInstaller onedir：`$RESOURCE/plotpilot-backend/plotpilot-backend[.exe]`（见 tauri.conf resources 映射）
     fn find_frozen_backend_exe(handle: &AppHandle) -> Option<PathBuf> {
+        let bin_name = Self::backend_binary_name();
+
         // 方案 1a：与 bundle.resources 映射一致（推荐；安装包与 tauri build 均可用）
         if let Ok(p) = handle.path().resolve(
-            "plotpilot-backend/plotpilot-backend.exe",
+            &format!("plotpilot-backend/{}", bin_name),
             BaseDirectory::Resource,
         ) {
             if p.is_file() {
@@ -149,7 +160,7 @@ impl BackendManager {
 
         // 方案 1b：旧配置曾用数组 + `../**/*`，打包后实际路径经 Tauri 归一化；用同一字符串解析
         if let Ok(p) = handle.path().resolve(
-            "../../out/tauri/plotpilot-backend/plotpilot-backend.exe",
+            &format!("../../out/tauri/plotpilot-backend/{}", bin_name),
             BaseDirectory::Resource,
         ) {
             if p.is_file() {
@@ -160,12 +171,12 @@ impl BackendManager {
 
         // 方案 1c：resource_dir 下直接探测（手工拷贝或扁平布局）
         if let Ok(rd) = handle.path().resource_dir() {
-            let nested = rd.join("plotpilot-backend").join("plotpilot-backend.exe");
+            let nested = rd.join("plotpilot-backend").join(bin_name);
             if nested.is_file() {
                 log::info!("📦 后端路径 (resource_dir nested): {}", nested.display());
                 return Some(nested);
             }
-            let flat = rd.join("plotpilot-backend.exe");
+            let flat = rd.join(bin_name);
             if flat.is_file() {
                 log::info!("📦 后端路径 (resource_dir flat): {}", flat.display());
                 return Some(flat);
@@ -184,7 +195,7 @@ impl BackendManager {
                     .join("out")
                     .join("tauri")
                     .join("plotpilot-backend")
-                    .join("plotpilot-backend.exe");
+                    .join(bin_name);
                 if candidate.is_file() {
                     log::info!("📦 后端路径 (dev walk-up): {}", candidate.display());
                     return Some(candidate);
@@ -192,11 +203,11 @@ impl BackendManager {
                 dir = d.parent().map(PathBuf::from);
             }
 
-            // 方案 3：与 plotpilot.exe 同目录下的 plotpilot-backend/（便携解压布局）
+            // 方案 3：与可执行文件同目录下的 plotpilot-backend/（便携解压布局）
             if let Some(parent) = exe_path.parent() {
                 let sibling = parent
                     .join("plotpilot-backend")
-                    .join("plotpilot-backend.exe");
+                    .join(bin_name);
                 if sibling.is_file() {
                     log::info!("📦 后端路径 (sibling dir): {}", sibling.display());
                     return Some(sibling);
@@ -321,15 +332,21 @@ impl BackendManager {
         }
 
         // 1) 检查项目目录下的内嵌 Python
-        let embedded = self.project_root.join("tools/python_embed/python.exe");
-        if let Some(path) = self.accept_python_candidate("项目目录内嵌 Python", embedded.clone())
+        #[cfg(target_os = "windows")]
+        let embedded_python = self.project_root.join("tools/python_embed/python.exe");
+        #[cfg(not(target_os = "windows"))]
+        let embedded_python = self.project_root.join("tools/python_embed/bin/python3");
+        if let Some(path) = self.accept_python_candidate("项目目录内嵌 Python", embedded_python.clone())
         {
             return Some(path);
         }
 
         // 2) 尝试从资源目录获取内嵌 Python
         if let Ok(resource_dir) = self._app_handle.path().resource_dir() {
+            #[cfg(target_os = "windows")]
             let resource_python = resource_dir.join("python_embed/python.exe");
+            #[cfg(not(target_os = "windows"))]
+            let resource_python = resource_dir.join("python_embed/bin/python3");
             if Self::is_python_314(&resource_python) {
                 // 复制到项目目录
                 if let Err(e) = self.extract_embedded_python(&resource_dir) {
@@ -352,13 +369,20 @@ impl BackendManager {
 
         // 3) 尝试从资源目录的 zip 解压
         if let Ok(resource_dir) = self._app_handle.path().resource_dir() {
-            let zip_path = resource_dir.join("python-3.14.5-embed-amd64.zip");
+            // macOS 使用 universal2 或 arm64/x86_64 zip，Windows 使用 amd64 zip
+            #[cfg(target_os = "windows")]
+            let zip_name = "python-3.14.5-embed-amd64.zip";
+            #[cfg(target_os = "macos")]
+            let zip_name = "python-3.14.5-macos-framework.zip";
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+            let zip_name = "python-3.14.5-embed-amd64.zip";
+            let zip_path = resource_dir.join(zip_name);
             if zip_path.exists() {
                 log::info!("📦 发现内嵌 Python zip，正在解压...");
-                if let Err(e) = self.extract_python_from_zip(&zip_path, &embedded) {
+                if let Err(e) = self.extract_python_from_zip(&zip_path, &embedded_python) {
                     log::warn!("解压内嵌 Python 失败: {}", e);
                 } else if let Some(path) =
-                    self.accept_python_candidate("内嵌 Python (从zip解压)", embedded.clone())
+                    self.accept_python_candidate("内嵌 Python (从zip解压)", embedded_python.clone())
                 {
                     return Some(path);
                 }
@@ -366,8 +390,11 @@ impl BackendManager {
         }
 
         // 4) 虚拟环境
-        let venv = self.project_root.join(".venv/Scripts/python.exe");
-        if let Some(path) = self.accept_python_candidate("虚拟环境 Python", venv) {
+        #[cfg(target_os = "windows")]
+        let venv_python = self.project_root.join(".venv/Scripts/python.exe");
+        #[cfg(not(target_os = "windows"))]
+        let venv_python = self.project_root.join(".venv/bin/python3");
+        if let Some(path) = self.accept_python_candidate("虚拟环境 Python", venv_python) {
             return Some(path);
         }
 
@@ -416,7 +443,7 @@ impl BackendManager {
             c
         } else {
             let python = self.find_python().ok_or_else(|| {
-                "未找到 plotpilot-backend.exe，也未找到 Python。发布构建请运行 scripts/build_backend_pyinstaller.py；开发请安装 Python 3.14.5".to_string()
+                "未找到 plotpilot-backend，也未找到 Python。发布构建请运行 scripts/build_macos_backend.py（macOS）或 scripts/build_backend_pyinstaller.py（Windows）；开发请安装 Python 3.14".to_string()
             })?;
             log::info!("🐍 启动 uvicorn（解释器）: {}", python.display());
             let mut c = Command::new(&python);
